@@ -142,7 +142,7 @@ export const PRICING_CONFIG = {
 
   /** §8 Competitor benchmark — configurable, editable per deal (spec §12.5) */
   competitor: {
-    label: "Tyler / Socrata Citizen Portal",
+    label: "Incumbent Data & Citizen Portal",
     /** ⚑ Populate from public procurement records per deal */
     defaultAnnual: 85_000,
     defaultImplementation: 45_000,

@@ -120,7 +120,7 @@ export default function App() {
           What would it cost your town to run a tamper-proof open-data portal?
         </h1>
         <p className="type-body-lg mt-4 max-w-2xl text-muted">
-          A blockchain-backed replacement for Tableau &amp; Tyler / Socrata — with{" "}
+          A blockchain-backed replacement for legacy BI dashboards and incumbent open-data portals — with{" "}
           <span className="text-blue-800 font-bold">unlimited citizen and staff access at $0 per user</span>. Enter a few
           numbers for an instant annual estimate and a 3-year comparison against legacy vendors.
         </p>

@@ -156,7 +156,7 @@ export default function QuoteForm({
             <p className="type-caption text-gold-600 mb-1">Competitor benchmark</p>
             <h3 className="type-h4 mb-2">{CFG.competitor.label}</h3>
             <p className="type-body-xs text-muted mb-4">
-              Gov contracts are public record — pull actual Tyler/Socrata figures from another town's procurement records for a defensible comparison.
+              Gov contracts are public record — pull the incumbent vendor's actual figures from another town's procurement records for a defensible comparison.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Competitor annual ($)" htmlFor="ca">

@@ -2,7 +2,7 @@
 
 A standalone web app that produces an **annual cost estimate for a municipality** to run
 **TLaaS (Trustless Ledger as a Service)** — CivicChain's blockchain-backed replacement for
-Tableau / Tyler-Socrata, whose commercial weapon is **$0 per-user pricing**.
+legacy BI / open-data incumbents, whose commercial weapon is **$0 per-user pricing**.
 
 Built to `TLaaS_Pricing_App_Build_Spec.md` (Draft v1.0). Styled to the
 [CivicChain brand system](https://civicchain-v2.vercel.app/brand) — DM Serif Text / DM Sans,
@@ -49,7 +49,7 @@ The following in `pricing.config.ts` are seed/placeholder values — replace wit
 
 - **Estimation coefficients** (`estimation.*`) — calibrate against real pilot ingestion/anchoring volume.
 - **Implementation fees & COGS** (`implementation.*`, `cogs.*`) — plug in real onboarding hours + loaded rate.
-- **Competitor defaults** (`competitor.*`) — populate from public Tyler/Socrata procurement records.
+- **Competitor defaults** (`competitor.*`) — populate from the incumbent vendor's public procurement records.
 - **Margin floor** (`guardrail.MIN_GROSS_MARGIN`, default 60%) — confirm the target.
 - **Tier population floors** (`tiers[].minPopulation`, `tierSelection.usePopulationFloor`).
 
