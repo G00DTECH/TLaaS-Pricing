@@ -27,16 +27,16 @@ const DEFAULT_INPUTS: QuoteInputs = {
 
 function Logo() {
   return (
-    <div className="flex items-center gap-2.5">
-      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden>
-        <rect width="32" height="32" rx="7" fill="var(--blue-800)" />
-        <path d="M16 6 L25 10.5 V17 C25 22 21 25.5 16 27 C11 25.5 7 22 7 17 V10.5 Z" fill="none" stroke="var(--gold-600)" strokeWidth="2" strokeLinejoin="round" />
-        <path d="M12 16.5 l3 3 l5.5 -6" fill="none" stroke="var(--green-300)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <div className="leading-tight">
-        <p className="font-display text-lg">CivicChain</p>
-        <p className="type-body-xs text-muted -mt-0.5">{CFG.product.longName}</p>
-      </div>
+    <div className="flex items-center gap-3">
+      <img
+        src={`${import.meta.env.BASE_URL}brand/civic-logo-w-text-horizontal.svg`}
+        alt="CivicChain"
+        className="h-7 w-auto"
+        width={175}
+        height={28}
+      />
+      <span className="hidden sm:inline-block h-6 w-px bg-border" aria-hidden />
+      <p className="hidden type-body-xs text-muted sm:block">{CFG.product.longName}</p>
     </div>
   );
 }
