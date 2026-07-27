@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  CivicChain brand tokens — OKLCH palette.
+  Families: Blue (civic ink / primary, hue 280), Gold (money/approvals, 70),
+  Green/Sage (verified, 150), Rose (danger, 20), Orange (warning, 50),
+  Cream (warm neutral bg, 84), Slate (muted purple text, 319).
+*/
+:root {
+  /* Blue — primary civic ink */
+  --blue-50: oklch(0.96 0.01 280);
+  --blue-100: oklch(0.93 0.02 280);
+  --blue-200: oklch(0.88 0.04 280);
+  --blue-300: oklch(0.8 0.06 280);
+  --blue-600: oklch(0.42 0.11 280);
+  --blue-700: oklch(0.34 0.11 280);
+  --blue-800: oklch(0.27 0.11 280);
+  --blue-900: oklch(0.2 0.12 280);
+
+  /* Gold — money / approvals */
+  --gold-50: oklch(0.97 0.02 70);
+  --gold-300: oklch(0.9 0.03 70);
+  --gold-600: oklch(0.7 0.11 70);
+  --gold-900: oklch(0.2 0.08 70);
+
+  /* Green / Sage — verified / healthy */
+  --green-300: oklch(0.9 0.02 150);
+  --green-600: oklch(0.6 0.09 150);
+  --green-900: oklch(0.27 0.02 150);
+
+  /* Rose — danger / risk */
+  --rose-300: oklch(0.92 0.02 20);
+  --rose-700: oklch(0.4 0.08 20);
+  --rose-900: oklch(0.28 0.08 20);
+
+  /* Orange — warning / caution */
+  --orange-300: oklch(0.89 0.05 50);
+  --orange-900: oklch(0.35 0.1 50);
+
+  /* Cream — warm neutral backgrounds */
+  --cream-50: oklch(0.99 0.01 84);
+  --cream-100: oklch(0.98 0.01 84);
+  --cream-200: oklch(0.96 0.01 84);
+
+  /* Slate — muted purple text / support */
+  --slate-400: oklch(0.65 0.03 319);
+  --slate-700: oklch(0.5 0.03 319);
+
+  /* Semantic roles */
+  --page-bg: var(--cream-200);
+  --foreground: var(--blue-900);
+  --muted-foreground: var(--slate-700);
+  --border: oklch(0.88 0.02 280);
+  --ring: oklch(0.7 0.11 70);
+
+  --surface-base: var(--cream-50);
+  --surface-subtle: oklch(0.97 0.01 280);
+  --surface-muted: var(--cream-100);
+  --surface-raised: var(--cream-50);
+  --control-bg: var(--cream-50);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-page text-foreground font-sans antialiased;
+  }
+  * {
+    border-color: var(--border);
+  }
+  /* Accessible focus ring on all interactive elements */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display font-normal tracking-tight;
+  }
+}
+
+@layer components {
+  /* ── Semantic type utilities (per brand type scale) ── */
+  .type-display { @apply font-display text-5xl sm:text-7xl leading-[1.02]; }
+  .type-h2 { @apply font-display text-4xl sm:text-6xl leading-[1.05]; }
+  .type-h3 { @apply font-display text-3xl sm:text-5xl leading-[1.08]; }
+  .type-h4 { @apply font-display text-2xl sm:text-3xl leading-[1.12]; }
+  .type-metric-lg { @apply font-display text-5xl sm:text-6xl leading-none; }
+  .type-metric-md { @apply font-display text-4xl sm:text-5xl leading-none; }
+  .type-metric-sm { @apply font-display text-2xl sm:text-3xl leading-none; }
+  .type-body-xl { @apply font-sans text-xl leading-relaxed; }
+  .type-body-lg { @apply font-sans text-lg leading-relaxed; }
+  .type-body { @apply font-sans text-base leading-relaxed; }
+  .type-body-bold { @apply font-sans text-base font-bold; }
+  .type-body-sm { @apply font-sans text-sm leading-relaxed; }
+  .type-body-xs { @apply font-sans text-xs; }
+  .type-card-title { @apply font-sans text-base font-bold; }
+  .type-caption { @apply font-sans text-xs font-medium uppercase tracking-[0.12em]; }
+  .type-code-xs { @apply font-mono text-xs font-medium; }
+
+  /* ── Surfaces ── */
+  .card {
+    @apply rounded-card border bg-surface-base;
+  }
+  .card-raised {
+    @apply rounded-card border bg-surface-raised shadow-raised;
+  }
+
+  /* ── Controls ── */
+  .field-label { @apply block type-caption text-muted mb-1.5; }
+  .control {
+    @apply w-full rounded-control border bg-control-bg px-3.5 py-2.5 type-body
+           text-foreground shadow-control placeholder:text-slate-400
+           transition-colors focus:border-gold-600;
+  }
+  .control-sm {
+    @apply w-full rounded-control border bg-control-bg px-3 py-2 type-body-sm
+           text-foreground shadow-control transition-colors focus:border-gold-600;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-control
+           px-5 py-2.5 type-body-bold transition-all disabled:opacity-50
+           disabled:cursor-not-allowed;
+  }
+  .btn-primary { @apply btn bg-blue-800 text-cream-50 hover:bg-blue-900; }
+  .btn-gold { @apply btn bg-gold-600 text-gold-900 hover:brightness-105; }
+  .btn-ghost { @apply btn border bg-transparent text-foreground hover:bg-surface-muted; }
+
+  /* ── Status pills ── */
+  .pill { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 type-body-xs font-medium; }
+  .pill-verified { @apply pill bg-green-300 text-green-900; }
+  .pill-gold { @apply pill bg-gold-300 text-gold-900; }
+  .pill-warn { @apply pill bg-orange-300 text-orange-900; }
+  .pill-risk { @apply pill bg-rose-300 text-rose-900; }
+}
