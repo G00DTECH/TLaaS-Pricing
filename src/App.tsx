@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { computeQuote, type QuoteInputs } from "./lib/pricing";
 import { PRICING_CONFIG as CFG } from "./pricing.config";
-import QuoteForm from "./components/QuoteForm";
+import QuoteForm, { type LeadStatus } from "./components/QuoteForm";
 import QuoteResults from "./components/QuoteResults";
+import { submitLead, firebaseEnabled } from "./lib/leads";
 
 /**
  * Simple shared-login gate for rep mode (spec §9.2). For a real deployment,
@@ -81,8 +82,30 @@ export default function App() {
   const [gateOpen, setGateOpen] = useState(false);
   const [inputs, setInputs] = useState<QuoteInputs>(DEFAULT_INPUTS);
 
+  // Lead capture (customer mode)
+  const [leadStatus, setLeadStatus] = useState<LeadStatus>("idle");
+  const [leadError, setLeadError] = useState<string | undefined>();
+  const [consent, setConsent] = useState(false);
+
   const quote = useMemo(() => computeQuote(inputs), [inputs]);
-  const patch = (p: Partial<QuoteInputs>) => setInputs((prev) => ({ ...prev, ...p }));
+  const patch = (p: Partial<QuoteInputs>) => {
+    setInputs((prev) => ({ ...prev, ...p }));
+    // Editing after a send resets the button so a fresh estimate can be sent;
+    // don't disturb an in-flight request.
+    setLeadStatus((s) => (s === "sending" ? s : "idle"));
+  };
+
+  const submitLeadHandler = async () => {
+    setLeadStatus("sending");
+    setLeadError(undefined);
+    try {
+      await submitLead(inputs, quote);
+      setLeadStatus("sent");
+    } catch (e) {
+      setLeadStatus("error");
+      setLeadError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const switchMode = (m: Mode) => {
     if (m === "rep" && mode !== "rep") setGateOpen(true);
@@ -129,7 +152,23 @@ export default function App() {
       {/* Body */}
       <main className="mx-auto grid max-w-6xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,420px)_1fr]">
         <div>
-          <QuoteForm inputs={inputs} onChange={patch} mode={mode} />
+          <QuoteForm
+            inputs={inputs}
+            onChange={patch}
+            mode={mode}
+            lead={
+              mode === "customer"
+                ? {
+                    enabled: firebaseEnabled,
+                    status: leadStatus,
+                    error: leadError,
+                    consent,
+                    onConsent: setConsent,
+                    onSubmit: submitLeadHandler,
+                  }
+                : undefined
+            }
+          />
         </div>
         <div>
           <QuoteResults quote={quote} mode={mode} />

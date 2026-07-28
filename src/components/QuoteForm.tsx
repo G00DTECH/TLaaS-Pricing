@@ -4,16 +4,34 @@ import { Field, NumberInput, TextInput, Select, Toggle } from "./ui";
 
 type Patch = Partial<QuoteInputs>;
 
+export type LeadStatus = "idle" | "sending" | "sent" | "error";
+
+export interface LeadCapture {
+  /** True when Firebase is configured; otherwise the send button is disabled. */
+  enabled: boolean;
+  status: LeadStatus;
+  error?: string;
+  consent: boolean;
+  onConsent: (v: boolean) => void;
+  onSubmit: () => void;
+}
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
 export default function QuoteForm({
   inputs,
   onChange,
   mode,
+  lead,
 }: {
   inputs: QuoteInputs;
   onChange: (p: Patch) => void;
   mode: "customer" | "rep";
+  lead?: LeadCapture;
 }) {
   const set = (p: Patch) => onChange(p);
+  const emailOk = EMAIL_RE.test((inputs.contactEmail ?? "").trim());
+  const firstName = (inputs.contactName ?? "").trim().split(" ")[0];
 
   return (
     <div className="space-y-5">
@@ -44,6 +62,10 @@ export default function QuoteForm({
         <section className="card p-5 sm:p-6">
           <p className="type-caption text-gold-600 mb-1">Get your estimate</p>
           <h3 className="type-h4 mb-4">Where should we send it?</h3>
+          <p className="type-body-sm text-muted mb-4">
+            Your estimate is already shown live on the right — no email required to see it. Leave your
+            details if you'd like a copy sent to you.
+          </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Your name" htmlFor="cname">
               <TextInput id="cname" value={inputs.contactName ?? ""} onChange={(v) => set({ contactName: v })} placeholder="Jane Rivera" />
@@ -52,7 +74,48 @@ export default function QuoteForm({
               <TextInput id="cemail" type="email" value={inputs.contactEmail ?? ""} onChange={(v) => set({ contactEmail: v })} placeholder="jane@springfield.gov" />
             </Field>
           </div>
-          <p className="mt-2 type-body-xs text-muted">We only use this to send your estimate. No citizen data is ever entered here.</p>
+
+          {lead && lead.status === "sent" ? (
+            <div className="mt-4 rounded-control bg-green-300 p-3 type-body-sm text-green-900">
+              ✓ Thanks{firstName ? `, ${firstName}` : ""}! Your request is logged and we'll send the
+              estimate to <strong>{(inputs.contactEmail ?? "").trim()}</strong>.
+            </div>
+          ) : (
+            <>
+              <label className="mt-4 flex cursor-pointer select-none items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border accent-gold-600"
+                  checked={lead?.consent ?? false}
+                  onChange={(e) => lead?.onConsent(e.target.checked)}
+                />
+                <span className="type-body-xs text-muted">
+                  Email me this estimate and occasional CivicChain updates. We use your details only to
+                  follow up — no citizen data is entered here, and you can opt out anytime.
+                </span>
+              </label>
+
+              <button
+                type="button"
+                className="btn-gold mt-3 w-full sm:w-auto"
+                disabled={!lead?.enabled || !emailOk || !lead?.consent || lead?.status === "sending"}
+                onClick={() => lead?.onSubmit()}
+              >
+                {lead?.status === "sending" ? "Sending…" : "Send me this estimate"}
+              </button>
+
+              {lead && !lead.enabled && (
+                <p className="mt-2 type-body-xs text-muted">
+                  Estimate delivery activates once Firebase is configured (see README).
+                </p>
+              )}
+              {lead?.status === "error" && (
+                <p className="mt-2 type-body-xs text-rose-700">
+                  Couldn't send just now{lead.error ? `: ${lead.error}` : ""}. Please try again.
+                </p>
+              )}
+            </>
+          )}
         </section>
       )}
 

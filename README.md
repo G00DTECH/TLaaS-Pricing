@@ -28,7 +28,33 @@ npm test           # 16 tests — includes the spec's worked examples A & B
 npm run build      # static bundle in dist/  → deploy to Vercel/Netlify/S3
 ```
 
-No backend is required for the calculator. Add one only for auth, lead capture, or saved quotes.
+No backend is required for the calculator itself. Lead capture uses Firebase (below).
+
+## Lead capture (Firebase)
+
+Customer mode captures a **consented** lead (name, email, municipality, and a snapshot of the
+computed quote) to **Cloud Firestore**. The estimate is shown live regardless — the email is
+optional and only sent when the visitor ticks consent and clicks **Send me this estimate**.
+Until Firebase is configured the button is disabled with a note, so the app runs fine without it.
+
+**Firebase console setup:**
+
+1. **Firestore** → Build → Firestore Database → Create → *Production mode* → pick a region.
+2. **Web app** → Project settings → Your apps → Web (`</>`) → copy the `firebaseConfig` values
+   into `.env` (`VITE_FIREBASE_*`). These are **not secrets** — the apiKey is a public project
+   identifier; Firestore is secured by rules + App Check, not by hiding it.
+3. **Security rules** → paste [`firestore.rules`](firestore.rules) into Firestore → Rules
+   (or `firebase deploy --only firestore:rules`). They allow create-only, shape-validated writes
+   to `leads` and block all client reads/updates/deletes.
+4. **App Check (recommended)** → App Check → register the web app with **reCAPTCHA v3** → put the
+   site key in `VITE_RECAPTCHA_SITE_KEY`, then enable **Enforcement** for Firestore. Stops bots
+   spamming the collection. Optional — skipped cleanly if the key is blank.
+
+**Where leads land:** the Firebase console (Firestore → `leads`). This stays on the free Spark
+plan — no Cloud Functions. Email/CRM notifications would need a Cloud Function or the "Trigger
+Email" extension (Blaze plan) and can be added later.
+
+See [`.env.example`](.env.example) for the full variable list.
 
 ## The one rule: pricing is DATA, not code
 
