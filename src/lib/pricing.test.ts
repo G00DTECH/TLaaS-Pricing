@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeQuote, estimateVolume, selectTier } from "./pricing";
+import { computeQuote, estimateVolume, selectTier, overageForTier, perTenantInfraMonthly } from "./pricing";
 import { PRICING_CONFIG as CFG } from "../pricing.config";
 import type { QuoteInputs } from "./pricing";
 
@@ -33,10 +33,13 @@ describe("Worked Example A — small town (spec §11)", () => {
     expect(est.monthlyTransactions).toBe(2430);
   });
 
-  it("selects a tier that covers 38 anchors (not Startup, which caps at 5)", () => {
+  it("keeps the small town on Startup and bills anchor overage (soft cap, not force-upgrade)", () => {
+    // 38 anchors/mo exceeds Startup's 5, but staying on Startup + overage
+    // (~$1,840/yr) is far cheaper for the town than an upgrade, so it stays.
     const { chosen } = selectTier(est, base);
-    expect(chosen.id).not.toBe("startup");
-    expect(chosen.includedAnchors).toBeGreaterThanOrEqual(38);
+    expect(chosen.id).toBe("startup");
+    const q = computeQuote(base);
+    expect(q.projectedAnchorOverageYr).toBeGreaterThan(0);
   });
 
   it("produces a coherent quote with all outputs rendered", () => {
@@ -66,9 +69,12 @@ describe("Worked Example B — rep supplies known volume (spec §11)", () => {
     expect(q.estimation.monthlyAnchors).toBe(40);
   });
 
-  it("lands on Enterprise (60k tx > Growth's 25k included)", () => {
+  it("lands on Growth + overage, not force-upgraded to Enterprise (60k tx)", () => {
+    // 60k tx > Growth's 25k included, but Growth + overage (~$11.1k) beats
+    // Enterprise's flat $30k, so the soft cap keeps the customer on Growth.
     const q = computeQuote(repInputs);
-    expect(q.tier.id).toBe("enterprise");
+    expect(q.tier.id).toBe("growth");
+    expect(q.projectedTxOverageYr).toBeGreaterThan(0);
   });
 
   it("applies the 10% discount to subscription only", () => {
@@ -148,8 +154,81 @@ describe("Margin guardrail (spec §4.3)", () => {
 
   it("min recurring for floor equals COGS / (1 - floor)", () => {
     const q = computeQuote({ ...base, tierOverride: "growth" });
-    const infra = CFG.cogs.infraMonthlyByTier.growth * 12;
+    const infra = perTenantInfraMonthly("growth", false) * 12;
     expect(q.margin.minRecurringForFloor).toBeCloseTo(infra / (1 - CFG.guardrail.MIN_GROSS_MARGIN), 2);
+  });
+});
+
+describe("Tier selection: soft cap with cost-minimizing upgrade (spec §6.2, fixed)", () => {
+  it("upgrades to Enterprise only when overage would exceed its flat rate", () => {
+    // Growth-floor town whose anchor burst makes Growth + overage cost more
+    // than Enterprise's flat $30k → Enterprise becomes the cheaper choice.
+    const q = computeQuote({
+      population: 30_000, // Growth floor
+      annualSolicitations: 0,
+      departments: 1,
+      knownMonthlyTransactions: 1000,
+      knownMonthlyAnchors: 30_000, // huge anchor volume
+    });
+    expect(q.tier.id).toBe("enterprise");
+  });
+
+  it("never overcharges: chosen tier is the cheapest at or above the population floor", () => {
+    const inputs = {
+      population: 30_000,
+      annualSolicitations: 300,
+      departments: 5,
+      knownMonthlyTransactions: 40_000,
+      knownMonthlyAnchors: 30,
+    };
+    const q = computeQuote(inputs);
+    // Tiers at or above the population floor (same rule the engine applies).
+    let floorIdx = 0;
+    for (let i = CFG.tiers.length - 1; i >= 0; i--) {
+      const mp = CFG.tiers[i].minPopulation ?? 0;
+      if (mp > 0 && inputs.population >= mp) {
+        floorIdx = i;
+        break;
+      }
+    }
+    const eligible = CFG.tiers.slice(floorIdx);
+    const cheapest = Math.min(
+      ...eligible.map((t) => {
+        const o = overageForTier(t, q.estimation);
+        return t.base * 12 + o.txOverageYr + o.anchorOverageYr;
+      }),
+    );
+    const chosenCost = q.annualSubscription + q.projectedTxOverageYr + q.projectedAnchorOverageYr;
+    expect(chosenCost).toBeCloseTo(cheapest, 2);
+  });
+
+  it("no longer produces a price cliff one unit over a tier limit", () => {
+    const atLimit = computeQuote({ population: 20_000, annualSolicitations: 0, departments: 1, knownMonthlyTransactions: 25_000, knownMonthlyAnchors: 0 });
+    const overLimit = computeQuote({ population: 20_000, annualSolicitations: 0, departments: 1, knownMonthlyTransactions: 25_100, knownMonthlyAnchors: 0 });
+    // Same tier, only a few cents of overage apart — not a 3× jump.
+    expect(overLimit.tier.id).toBe(atLimit.tier.id);
+    expect(overLimit.recurringAnnual - atLimit.recurringAnnual).toBeLessThan(1);
+  });
+});
+
+describe("Multi-tenant COGS model (spec §4.1, fixed)", () => {
+  it("shared per-tenant infra is a fraction of the full environment cost", () => {
+    const perTenant = perTenantInfraMonthly("growth", false);
+    expect(perTenant).toBeLessThan(CFG.cogs.sharedEnvMonthlyByTier.growth);
+  });
+
+  it("dedicated (single-tenant) bears the full unamortized environment + uplift", () => {
+    const shared = perTenantInfraMonthly("growth", false);
+    const dedicated = perTenantInfraMonthly("growth", true);
+    expect(dedicated).toBeGreaterThan(shared * 3);
+  });
+
+  it("every tier clears the 60% margin floor at full list price", () => {
+    for (const t of CFG.tiers) {
+      const q = computeQuote({ ...base, population: 1000, tierOverride: t.id, discountPct: 0 });
+      expect(q.margin.meetsFloor).toBe(true);
+      expect(q.margin.recurringMargin).toBeGreaterThanOrEqual(CFG.guardrail.MIN_GROSS_MARGIN);
+    }
   });
 });
 

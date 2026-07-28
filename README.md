@@ -49,6 +49,8 @@ The following in `pricing.config.ts` are seed/placeholder values — replace wit
 
 - **Estimation coefficients** (`estimation.*`) — calibrate against real pilot ingestion/anchoring volume.
 - **Implementation fees & COGS** (`implementation.*`, `cogs.*`) — plug in real onboarding hours + loaded rate.
+  COGS is **multi-tenant**: per-tenant infra = shared environment ÷ tenants-per-environment + marginal
+  per-tenant cost (dedicated/GovCloud bears the full unamortized environment). Calibrate the tenant counts.
 - **Competitor defaults** (`competitor.*`) — populate from the incumbent vendor's public procurement records.
 - **Margin floor** (`guardrail.MIN_GROSS_MARGIN`, default 60%) — confirm the target.
 - **Tier population floors** (`tiers[].minPopulation`, `tierSelection.usePopulationFloor`).

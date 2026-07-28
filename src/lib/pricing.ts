@@ -150,25 +150,64 @@ export function estimateVolume(inputs: QuoteInputs): Estimation {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Overage (spec §7.1) — shared by tier selection and the final quote.
+// ─────────────────────────────────────────────────────────────────────────
+
+export function overageForTier(tier: Tier, est: Estimation): { txOverageYr: number; anchorOverageYr: number } {
+  const txOverUnits = Math.max(0, est.monthlyTransactions - tier.includedTx);
+  const txOverageYr = (txOverUnits * 12 / 100) * CFG.overage.txPer100Rows;
+
+  const anchorOverUnits =
+    tier.includedAnchors === Infinity ? 0 : Math.max(0, est.monthlyAnchors - tier.includedAnchors);
+  const anchorOverageYr = anchorOverUnits * 12 * CFG.overage.perAnchor;
+
+  return { txOverageYr, anchorOverageYr };
+}
+
+/** Annual base + projected overage for a tier — the customer's cost on it. */
+function annualCostOnTier(tier: Tier, est: Estimation): number {
+  const o = overageForTier(tier, est);
+  return tier.base * 12 + o.txOverageYr + o.anchorOverageYr;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Tier selection (spec §6.2)
 // ─────────────────────────────────────────────────────────────────────────
+//
+// SOFT CAP: a customer stays on their tier and pays overage for usage above
+// the included allowance. We do NOT force-upgrade the moment a limit is
+// exceeded (the old behavior created price cliffs — e.g. one transaction over
+// Growth jumped the quote from ~$9k to $30k — and made the overage config dead
+// code). Instead we pick, from the tiers at or above the population floor, the
+// one that costs the CUSTOMER the least (base + projected overage). A higher
+// tier only wins when its flat rate genuinely beats the lower tier + overage,
+// so customers are never overcharged and overage actually fires.
 
 export function selectTier(est: Estimation, inputs: QuoteInputs): { auto: Tier; chosen: Tier } {
   const tiers = CFG.tiers;
 
-  // Smallest tier whose included limits cover BOTH tx and anchors.
-  let auto =
-    tiers.find(
-      (t) => est.monthlyTransactions <= t.includedTx && est.monthlyAnchors <= t.includedAnchors,
-    ) ?? tiers[tiers.length - 1];
-
-  // Optional population floor (spec §12.3).
+  // Population floor (spec §12.3): the customer's scale sets the MINIMUM tier so
+  // a large municipality is never sold a tiny plan (segmentation guardrail).
+  let floorIdx = 0;
   if (CFG.tierSelection.usePopulationFloor) {
-    const floorTier = [...tiers]
-      .reverse()
-      .find((t) => (t.minPopulation ?? 0) <= inputs.population && (t.minPopulation ?? 0) > 0);
-    if (floorTier && tiers.indexOf(floorTier) > tiers.indexOf(auto)) {
-      auto = floorTier;
+    for (let i = tiers.length - 1; i >= 0; i--) {
+      const mp = tiers[i].minPopulation ?? 0;
+      if (mp > 0 && inputs.population >= mp) {
+        floorIdx = i;
+        break;
+      }
+    }
+  }
+
+  // Cheapest tier at or above the floor.
+  const candidates = tiers.slice(floorIdx);
+  let auto = candidates[0];
+  let bestCost = Infinity;
+  for (const t of candidates) {
+    const cost = annualCostOnTier(t, est);
+    if (cost < bestCost) {
+      bestCost = cost;
+      auto = t;
     }
   }
 
@@ -192,13 +231,8 @@ export function computeQuote(inputs: QuoteInputs): Quote {
 
   // ── Recurring subscription & overages ──
   const annualSubscription = tier.base * 12;
-
-  const txOverUnits = Math.max(0, est.monthlyTransactions - tier.includedTx);
-  const projectedTxOverageYr = (txOverUnits * 12 / 100) * CFG.overage.txPer100Rows;
-
-  const anchorOverUnits =
-    tier.includedAnchors === Infinity ? 0 : Math.max(0, est.monthlyAnchors - tier.includedAnchors);
-  const projectedAnchorOverageYr = anchorOverUnits * 12 * CFG.overage.perAnchor;
+  const { txOverageYr: projectedTxOverageYr, anchorOverageYr: projectedAnchorOverageYr } =
+    overageForTier(tier, est);
 
   // ── Recurring add-ons ──
   let recurringAddonsYr = 0;
@@ -307,6 +341,21 @@ function complexityFromDepartments(depts: number): "low" | "med" | "high" {
   return "high";
 }
 
+/**
+ * Per-tenant monthly infra COGS under the multi-tenant model (spec §4.1).
+ * Shared deployments amortize the environment across tenants and add a marginal
+ * per-tenant cost; dedicated/GovCloud is single-tenant so it bears the full
+ * environment plus the dedicated uplift.
+ */
+export function perTenantInfraMonthly(tierId: TierId, isDedicated: boolean): number {
+  const c = CFG.cogs;
+  const shared = c.sharedEnvMonthlyByTier[tierId];
+  const marginal = c.marginalMonthlyByTier[tierId];
+  if (isDedicated) return (shared + marginal) * (1 + c.dedicatedInfraUpliftPct);
+  const tenants = Math.max(1, c.tenantsPerEnvironmentByTier[tierId]);
+  return shared / tenants + marginal;
+}
+
 function computeMargin(args: {
   tier: Tier;
   isDedicated: boolean;
@@ -318,8 +367,7 @@ function computeMargin(args: {
   allowSubFloorDiscount: boolean;
 }): MarginView {
   const c = CFG.cogs;
-  let infraMonthly = c.infraMonthlyByTier[args.tier.id];
-  if (args.isDedicated) infraMonthly *= 1 + c.dedicatedInfraUpliftPct;
+  const infraMonthly = perTenantInfraMonthly(args.tier.id, args.isDedicated);
   const annualCogs = infraMonthly * 12;
 
   const oneTimeCogs = c.loadedHourlyRate * c.implementationHours[args.implementationComplexity];

@@ -122,11 +122,29 @@ export const PRICING_CONFIG = {
     govcloudPremiumPct: 0.2,
   },
 
-  /** §4.1 Internal COGS — rep-mode margin view & guardrails — ⚑ CALIBRATE */
+  /**
+   * §4.1 Internal COGS — rep-mode margin view & guardrails.
+   *
+   * MULTI-TENANT MODEL: TLaaS is multi-tenant, so a tier's shared environment
+   * cost is AMORTIZED across every tenant on it, plus a true marginal per-tenant
+   * cost. Treating a whole environment as one tenant's COGS (the old model)
+   * massively understates margin at scale and makes the margin floor fire on
+   * nearly every quote. Per-tenant monthly infra is computed in the engine as:
+   *
+   *   shared deployment:  sharedEnvMonthly / tenantsPerEnvironment + marginalMonthly
+   *   dedicated/GovCloud: (sharedEnvMonthly + marginalMonthly) × (1 + upliftPct)
+   *     — single-tenant, so it bears the FULL unamortized environment.
+   *
+   * ⚑ CALIBRATE every value with real infrastructure + tenant-count data.
+   */
   cogs: {
-    /** Monthly infra COGS by tier (midpoint of spec ranges) */
-    infraMonthlyByTier: { startup: 100, growth: 400, enterprise: 750 } as Record<TierId, number>,
-    /** GovCloud/dedicated adds this % on top of infra */
+    /** Full monthly cost of a tier's shared environment (spec §4.1 midpoints) */
+    sharedEnvMonthlyByTier: { startup: 100, growth: 400, enterprise: 750 } as Record<TierId, number>,
+    /** Expected tenants sharing one environment — the amortization denominator */
+    tenantsPerEnvironmentByTier: { startup: 40, growth: 25, enterprise: 12 } as Record<TierId, number>,
+    /** True marginal per-tenant monthly cost (per-tenant storage, DB, support share) */
+    marginalMonthlyByTier: { startup: 8, growth: 20, enterprise: 45 } as Record<TierId, number>,
+    /** Dedicated / GovCloud (single-tenant) adds this % on top of the full env */
     dedicatedInfraUpliftPct: 0.2,
     /** Loaded blended hourly rate for implementation labor */
     loadedHourlyRate: 165,
