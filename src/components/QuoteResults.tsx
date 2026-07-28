@@ -1,7 +1,9 @@
+import type { ReactNode } from "react";
 import type { Quote } from "../lib/pricing";
 import { PRICING_CONFIG as CFG } from "../pricing.config";
-import { money, moneyAuto, num, pct } from "../lib/format";
+import { money, money2, moneyAuto, num, pct } from "../lib/format";
 import { generateQuotePdf } from "../lib/pdf";
+import { InfoTip } from "./ui";
 
 function Metric({ label, value, sub, tone = "ink" }: { label: string; value: string; sub?: string; tone?: "ink" | "gold" | "sky" }) {
   const toneCls =
@@ -19,10 +21,27 @@ function Metric({ label, value, sub, tone = "ink" }: { label: string; value: str
   );
 }
 
-function Row({ label, value, indent, strong, positive }: { label: string; value: string; indent?: boolean; strong?: boolean; positive?: boolean }) {
+function Row({
+  label,
+  value,
+  indent,
+  strong,
+  positive,
+  tip,
+}: {
+  label: string;
+  value: string;
+  indent?: boolean;
+  strong?: boolean;
+  positive?: boolean;
+  tip?: ReactNode;
+}) {
   return (
     <div className={`flex items-baseline justify-between gap-4 py-1.5 ${indent ? "pl-4" : ""}`}>
-      <span className={`${strong ? "type-body-bold" : "type-body-sm"} ${indent ? "text-muted" : ""}`}>{label}</span>
+      <span className={`${strong ? "type-body-bold" : "type-body-sm"} ${indent ? "text-muted" : ""}`}>
+        {label}
+        {tip}
+      </span>
       <span className={`tabular-nums ${strong ? "type-body-bold" : "type-body-sm"} ${positive ? "text-green-600" : ""}`}>{value}</span>
     </div>
   );
@@ -32,6 +51,21 @@ export default function QuoteResults({ quote, mode }: { quote: Quote; mode: "cus
   const q = quote;
   const c = q.competitor;
   const est = q.estimation;
+
+  // ── Derived values for the live-number tooltips (rep mode) ──
+  const tier = q.tier;
+  const isDedicated = q.inputs.deployment === "dedicated_govcloud";
+  const txExcess = Math.max(0, est.monthlyTransactions - tier.includedTx);
+  const anchorExcess =
+    tier.includedAnchors === Infinity ? 0 : Math.max(0, est.monthlyAnchors - tier.includedAnchors);
+  const sharedEnv = CFG.cogs.sharedEnvMonthlyByTier[tier.id];
+  const tenantsPerEnv = CFG.cogs.tenantsPerEnvironmentByTier[tier.id];
+  const marginalMonthly = CFG.cogs.marginalMonthlyByTier[tier.id];
+  const implHours = Math.round(q.margin.oneTimeCogs / CFG.cogs.loadedHourlyRate);
+
+  /** Renders an info tooltip only in rep mode; hidden entirely for customers. */
+  const repTip = (label: string, body: ReactNode) =>
+    mode === "rep" ? <InfoTip label={label}>{body}</InfoTip> : undefined;
 
   return (
     <div className="space-y-5">
@@ -69,7 +103,18 @@ export default function QuoteResults({ quote, mode }: { quote: Quote; mode: "cus
         <h3 className="type-h4 mb-3">Cost breakdown</h3>
 
         <p className="type-caption text-muted mb-1">One-time</p>
-        <Row label="Implementation" value={money(q.oneTimeImplementation)} strong />
+        <Row
+          label="Implementation"
+          value={money(q.oneTimeImplementation)}
+          strong
+          tip={repTip(
+            "Implementation",
+            <>
+              One-time onboarding, billed once in year 1 (not part of the recurring figures).
+              Sum of the items below = <strong>{money(q.oneTimeImplementation)}</strong>.
+            </>,
+          )}
+        />
         {q.implementationBreakdown.map((b) => (
           <Row key={b.label} label={b.label} value={moneyAuto(b.amount)} indent />
         ))}
@@ -77,14 +122,105 @@ export default function QuoteResults({ quote, mode }: { quote: Quote; mode: "cus
         <div className="my-3 border-t" />
 
         <p className="type-caption text-muted mb-1">Recurring (annual)</p>
-        <Row label={`Subscription — ${q.tier.label}`} value={money(q.annualSubscription)} strong />
-        {q.discountAmount > 0 && <Row label="Discount applied" value={`– ${money(q.discountAmount)}`} indent />}
-        {q.projectedTxOverageYr > 0 && <Row label="Projected ingestion overage" value={moneyAuto(q.projectedTxOverageYr)} indent />}
-        {q.projectedAnchorOverageYr > 0 && <Row label="Projected anchoring overage" value={moneyAuto(q.projectedAnchorOverageYr)} indent />}
-        {q.recurringAddonsYr > 0 && <Row label="Recurring add-ons" value={money(q.recurringAddonsYr)} indent />}
+        <Row
+          label={`Subscription — ${q.tier.label}`}
+          value={money(q.annualSubscription)}
+          strong
+          tip={repTip(
+            "Subscription",
+            <>
+              Tier base × 12 months = {money(tier.base)} × 12 ={" "}
+              <strong>{money(q.annualSubscription)}</strong>.
+            </>,
+          )}
+        />
+        {q.discountAmount > 0 && (
+          <Row
+            label="Discount applied"
+            value={`– ${money(q.discountAmount)}`}
+            indent
+            tip={repTip(
+              "Discount",
+              <>
+                {q.inputs.discountPct}% of subscription = {pct((q.inputs.discountPct ?? 0) / 100)} ×{" "}
+                {money(q.annualSubscription)} = <strong>{money(q.discountAmount)}</strong> off. Applied
+                to subscription only, then checked against the margin floor.
+              </>,
+            )}
+          />
+        )}
+        {q.projectedTxOverageYr > 0 && (
+          <Row
+            label="Projected ingestion overage"
+            value={moneyAuto(q.projectedTxOverageYr)}
+            indent
+            tip={repTip(
+              "Ingestion overage",
+              <>
+                ({num(est.monthlyTransactions)} used − {num(tier.includedTx)} included ={" "}
+                {num(txExcess)}/mo) × 12 ÷ 100 rows × {money2(CFG.overage.txPer100Rows)} ={" "}
+                <strong>{moneyAuto(q.projectedTxOverageYr)}</strong>/yr.
+              </>,
+            )}
+          />
+        )}
+        {q.projectedAnchorOverageYr > 0 && (
+          <Row
+            label="Projected anchoring overage"
+            value={moneyAuto(q.projectedAnchorOverageYr)}
+            indent
+            tip={repTip(
+              "Anchoring overage",
+              <>
+                ({num(est.monthlyAnchors)} used − {num(tier.includedAnchors)} included ={" "}
+                {num(anchorExcess)}/mo) × 12 × {money2(CFG.overage.perAnchor)} ={" "}
+                <strong>{moneyAuto(q.projectedAnchorOverageYr)}</strong>/yr.
+              </>,
+            )}
+          />
+        )}
+        {q.recurringAddonsYr > 0 && (
+          <Row
+            label="Recurring add-ons"
+            value={money(q.recurringAddonsYr)}
+            indent
+            tip={repTip(
+              "Recurring add-ons",
+              <ul className="space-y-0.5">
+                {q.inputs.support === "priority" && (
+                  <li>Priority support: {money(CFG.addons.prioritySupportAnnual)}/yr</li>
+                )}
+                {q.inputs.support === "gov_sla" && (
+                  <li>Gov SLA: {money(CFG.addons.govSlaAnnual)}/yr</li>
+                )}
+                {isDedicated && <li>Dedicated RPC: {money(CFG.addons.dedicatedRpcAnnual)}/yr</li>}
+                {isDedicated && (
+                  <li>
+                    GovCloud premium: {pct(CFG.addons.govcloudPremiumPct)} × {money(q.annualSubscription)} ={" "}
+                    {money(q.annualSubscription * CFG.addons.govcloudPremiumPct)}/yr
+                  </li>
+                )}
+                <li className="mt-1 border-t pt-1">
+                  Total = <strong>{money(q.recurringAddonsYr)}</strong>/yr
+                </li>
+              </ul>,
+            )}
+          />
+        )}
 
         <div className="my-3 border-t border-gold-600" />
-        <Row label="Year 1 total" value={money(q.yearOneTotal)} strong />
+        <Row
+          label="Year 1 total"
+          value={money(q.yearOneTotal)}
+          strong
+          tip={repTip(
+            "Year 1 total",
+            <>
+              One-time implementation + recurring annual = {money(q.oneTimeImplementation)} +{" "}
+              {money(q.recurringAnnual)} = <strong>{money(q.yearOneTotal)}</strong>.
+            </>,
+          )}
+        />
 
         <p className="mt-3 type-body-xs text-muted">
           Estimated usage: {num(est.monthlyTransactions)} transactions/mo · {num(est.monthlyAnchors)} anchors/mo
@@ -136,12 +272,63 @@ export default function QuoteResults({ quote, mode }: { quote: Quote; mode: "cus
           </div>
           <div className="mt-3 grid gap-4 sm:grid-cols-2">
             <div>
-              <Row label="Est. annual COGS" value={money(q.margin.annualCogs)} />
-              <Row label="Est. one-time impl. COGS" value={money(q.margin.oneTimeCogs)} />
+              <Row
+                label="Est. annual COGS"
+                value={money(q.margin.annualCogs)}
+                tip={
+                  <InfoTip label="Annual COGS">
+                    {isDedicated ? (
+                      <>
+                        Dedicated (single-tenant): (shared env {money(sharedEnv)} + marginal{" "}
+                        {money(marginalMonthly)}) × {pct(1 + CFG.cogs.dedicatedInfraUpliftPct)} uplift ×
+                        12 = <strong>{money(q.margin.annualCogs)}</strong>/yr.
+                      </>
+                    ) : (
+                      <>
+                        Multi-tenant: shared env {money(sharedEnv)} ÷ {tenantsPerEnv} tenants + marginal{" "}
+                        {money(marginalMonthly)} = {money2(q.margin.annualCogs / 12)}/mo × 12 ={" "}
+                        <strong>{money(q.margin.annualCogs)}</strong>/yr.
+                      </>
+                    )}
+                  </InfoTip>
+                }
+              />
+              <Row
+                label="Est. one-time impl. COGS"
+                value={money(q.margin.oneTimeCogs)}
+                tip={
+                  <InfoTip label="Implementation COGS">
+                    Loaded rate {money(CFG.cogs.loadedHourlyRate)}/hr × {implHours} onboarding hrs ={" "}
+                    <strong>{money(q.margin.oneTimeCogs)}</strong>. Not currently checked against the
+                    margin floor.
+                  </InfoTip>
+                }
+              />
             </div>
             <div>
-              <Row label="Recurring gross margin" value={pct(q.margin.recurringMargin, 1)} strong />
-              <Row label="Min recurring for floor" value={money(q.margin.minRecurringForFloor)} />
+              <Row
+                label="Recurring gross margin"
+                value={pct(q.margin.recurringMargin, 1)}
+                strong
+                tip={
+                  <InfoTip label="Recurring gross margin" align="right">
+                    (recurring {money(q.recurringAnnual)} − COGS {money(q.margin.annualCogs)}) ÷
+                    recurring {money(q.recurringAnnual)} ={" "}
+                    <strong>{pct(q.margin.recurringMargin, 1)}</strong>.
+                  </InfoTip>
+                }
+              />
+              <Row
+                label="Min recurring for floor"
+                value={money(q.margin.minRecurringForFloor)}
+                tip={
+                  <InfoTip label="Min recurring for floor" align="right">
+                    COGS {money(q.margin.annualCogs)} ÷ (1 − {pct(CFG.guardrail.MIN_GROSS_MARGIN)} floor)
+                    = <strong>{money(q.margin.minRecurringForFloor)}</strong>. Discounts below this trip
+                    the floor warning.
+                  </InfoTip>
+                }
+              />
             </div>
           </div>
           {q.warnings.map((w) => (

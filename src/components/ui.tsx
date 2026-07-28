@@ -1,5 +1,43 @@
 /** Small brand-styled form/UI primitives shared across the app. */
-import React from "react";
+import React, { useId } from "react";
+
+/**
+ * Accessible info tooltip. A small focusable trigger reveals an explanation on
+ * hover AND keyboard focus (WCAG 2.1 AA), wired via aria-describedby. Content is
+ * plain text/JSX — pass live, plugged-in numbers for calculation explanations.
+ */
+export function InfoTip({
+  label,
+  children,
+  align = "left",
+}: {
+  label: string;
+  children: React.ReactNode;
+  align?: "left" | "right";
+}) {
+  const id = useId();
+  return (
+    <span className="group relative inline-flex align-middle">
+      <button
+        type="button"
+        aria-label={`Explain: ${label}`}
+        aria-describedby={id}
+        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full border text-[10px] font-bold leading-none text-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+      >
+        i
+      </button>
+      <span
+        role="tooltip"
+        id={id}
+        className={`pointer-events-none absolute top-full z-40 mt-1.5 w-64 rounded-control border bg-surface-base p-3 type-body-xs leading-relaxed text-foreground shadow-raised opacity-0 transition-opacity duration-100 group-hover:opacity-100 group-focus-within:opacity-100 ${
+          align === "right" ? "right-0" : "left-0"
+        }`}
+      >
+        {children}
+      </span>
+    </span>
+  );
+}
 
 export function Field({
   label,
